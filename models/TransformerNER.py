@@ -19,7 +19,7 @@ class TransformerNER(nn.Module):
         pad_token_id: int = 0,
     ):
         super().__init__()
-
+        self.pad_token_id=pad_token_id
         self.embedding = nn.Embedding(
             num_embeddings=vocab_size,
             embedding_dim=d_model,
@@ -39,12 +39,19 @@ class TransformerNER(nn.Module):
 
         self.classifier = nn.Linear(d_model, num_tags)
 
-    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+    def forward(self, input_ids: torch.Tensor, return_hidden_states: bool = False):
         # input_ids: [B, L]
         x = self.embedding(input_ids)   # [B, L, D]
         x = self.pos_encoding(x)        # [B, L, D]
         x = self.dropout(x)
+        attention_mask = (input_ids != self.pad_token_id)   # [B, L]
+        if return_hidden_states:
+            x, hidden_states = self.encoder(x, return_hidden_states=True,attention_mask=attention_mask)
+        else:
+            x = self.encoder(x,attention_mask=attention_mask)
 
-        x = self.encoder(x)             # [B, L, D]
         logits = self.classifier(x)     # [B, L, num_tags]
+
+        if return_hidden_states:
+            return logits, hidden_states
         return logits

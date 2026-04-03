@@ -19,7 +19,17 @@ class TransformerEncoder(nn.Module):
             for _ in range(num_layers)
         ])
 
-    def forward(self, x):
+    def forward(self, x, return_hidden_states=False,attention_mask=None):
+        hidden_states = []
+
+        if return_hidden_states:
+            hidden_states.append(x)   # 输入到第1层前的表示
+
         for layer in self.layers:
-            x = layer(x)
+            x = layer(x,attention_mask=attention_mask)
+            if return_hidden_states:
+                hidden_states.append(x)   # 每层输出都记下来
+
+        if return_hidden_states:
+            return x, hidden_states
         return x

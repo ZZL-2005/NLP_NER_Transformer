@@ -17,8 +17,8 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_proj = nn.Linear(d_model, d_model)
         self.out_proj = nn.Linear(d_model, d_model)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: [B, L, D]
+    def forward(self, x: torch.Tensor,attention_mask=None) -> torch.Tensor:
+        # x: [B, L, D],out: [B, L, D]
         B, L, D = x.shape
 
         Q = self.q_proj(x)  # [B, L, D]
@@ -32,7 +32,14 @@ class MultiHeadSelfAttention(nn.Module):
 
         # attention score: [B, H, L, L]
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.head_dim)
+        
+        if attention_mask is not None:
+            # [B, L] -> [B, 1, 1, L]
+            mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
+            # mask=False 的位置是 PAD，把对应 score 变成一个极小值
+            scores = scores.masked_fill(~mask, float("-inf"))
+            
         attn_weights = torch.softmax(scores, dim=-1)
 
         # [B, H, L, L] @ [B, H, L, Hd] -> [B, H, L, Hd]

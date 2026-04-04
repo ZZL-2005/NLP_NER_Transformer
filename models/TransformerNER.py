@@ -39,12 +39,19 @@ class TransformerNER(nn.Module):
 
         self.classifier = nn.Linear(d_model, num_tags)
 
-    def forward(self, input_ids: torch.Tensor, return_hidden_states: bool = False):
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        return_hidden_states: bool = False,
+        attention_mask: torch.Tensor = None,
+    ):
         # input_ids: [B, L]
         x = self.embedding(input_ids)   # [B, L, D]
         x = self.pos_encoding(x)        # [B, L, D]
         x = self.dropout(x)
-        attention_mask = (input_ids != self.pad_token_id)   # [B, L]
+        if attention_mask is None:
+            attention_mask = (input_ids != self.pad_token_id)   # [B, L]
+        x = x * attention_mask.unsqueeze(-1).to(x.dtype)
         if return_hidden_states:
             x, hidden_states = self.encoder(x, return_hidden_states=True,attention_mask=attention_mask)
         else:

@@ -26,6 +26,7 @@ class AttnResTransformerNER(nn.Module):
             embedding_dim=d_model,
             padding_idx=pad_token_id,
         )
+        self.pad_token_id = pad_token_id
 
         self.pos_encoding = SinusoidalPositionalEncoding(d_model=d_model, max_len=max_len)
         self.dropout = nn.Dropout(dropout)
@@ -55,6 +56,10 @@ class AttnResTransformerNER(nn.Module):
         x = self.embedding(input_ids)      # [B, T, D]
         x = self.pos_encoding(x)           # [B, T, D]
         x = self.dropout(x)
+
+        if attention_mask is None:
+            attention_mask = (input_ids != self.pad_token_id)
+        x = x * attention_mask.unsqueeze(-1).to(x.dtype)
 
         x, history = self.encoder(x, attention_mask=attention_mask)
 

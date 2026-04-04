@@ -70,10 +70,11 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch, num_
     for batch in pbar:
         input_ids = batch["input_ids"].to(device)
         label_ids = batch["label_ids"].to(device)
+        attention_mask = batch["attention_mask"].to(device)
 
         optimizer.zero_grad()
 
-        logits = model(input_ids)  # [B, L, num_tags]
+        logits = model(input_ids, attention_mask=attention_mask)  # [B, L, num_tags]
 
         loss = criterion(
             logits.reshape(-1, logits.size(-1)),
@@ -106,8 +107,9 @@ def evaluate(model, dataloader, criterion, device, id2tag):
     for batch in pbar:
         input_ids = batch["input_ids"].to(device)
         label_ids = batch["label_ids"].to(device)
+        attention_mask = batch["attention_mask"].to(device)
 
-        logits = model(input_ids)
+        logits = model(input_ids, attention_mask=attention_mask)
 
         loss = criterion(
             logits.reshape(-1, logits.size(-1)),

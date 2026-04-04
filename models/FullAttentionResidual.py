@@ -13,6 +13,7 @@ class FullAttentionResidual(nn.Module):
         self,
         query: torch.Tensor,
         sources: list[torch.Tensor],
+        attention_mask: torch.Tensor = None,
     ) -> torch.Tensor:
         """
         query:   [D]
@@ -38,5 +39,8 @@ class FullAttentionResidual(nn.Module):
 
         # 加权求和 -> [B, T, D]
         h = torch.einsum("sbt,sbtd->btd", alpha, V)
+
+        if attention_mask is not None:
+            h = h * attention_mask.unsqueeze(-1).to(h.dtype)
 
         return h

@@ -24,7 +24,11 @@ class AttnResTransformerEncoderLayer(nn.Module):
 
     def forward(self, history: list[torch.Tensor], attention_mask=None) -> list[torch.Tensor]:
         # 1) attention前的depth聚合
-        h_attn_in = self.attn_res(self.attn_res_query, history)   # [B, T, D]
+        h_attn_in = self.attn_res(
+            self.attn_res_query,
+            history,
+            attention_mask=attention_mask,
+        )   # [B, T, D]
 
         # 2) self-attention
         attn_out = self.attn(self.attn_norm(h_attn_in), attention_mask=attention_mask)
@@ -34,7 +38,11 @@ class AttnResTransformerEncoderLayer(nn.Module):
         history = history + [attn_out]
 
         # 4) FFN前的depth聚合
-        h_ffn_in = self.ffn_res(self.ffn_res_query, history)      # [B, T, D]
+        h_ffn_in = self.ffn_res(
+            self.ffn_res_query,
+            history,
+            attention_mask=attention_mask,
+        )      # [B, T, D]
 
         # 5) FFN
         ffn_out = self.ffn(self.ffn_norm(h_ffn_in))

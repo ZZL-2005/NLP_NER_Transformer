@@ -1,5 +1,5 @@
 from models.TransformerNER import TransformerNER
-from models.Attention_Residual_Kimi import AttnResTransformerNER
+from models.Attention_Residual_Kimi import AttnResTransformerNER,AttnResTransformerNER_MY
 from torch.utils.data import DataLoader
 from dataset.dataset import NERDataset, collate_fn
 
@@ -57,7 +57,17 @@ def build_model(args, vocab_size, num_tags, pad_token_id):
             max_len=args.max_len,
             dropout=args.dropout,
             pad_token_id=pad_token_id,)
-
+    elif args.model_name == "attnres_transformer_my":
+        model = AttnResTransformerNER_MY(
+            vocab_size=vocab_size,
+            num_tags=num_tags,
+            d_model=args.d_model,
+            n_heads=args.n_heads,
+            d_ff=args.d_ff,
+            num_layers=args.num_layers,
+            max_len=args.max_len,
+            dropout=args.dropout,
+            pad_token_id=pad_token_id,)
     else:
         raise ValueError(f"不支持的 model_name: {args.model_name}")
 

@@ -22,7 +22,7 @@ python train.py \
   --d_model 256 \
   --n_heads 4 \
   --d_ff 512 \
-  --num_layers 8 \
+  --num_layers 4 \
   --max_len 5000 \
   --dropout 0.1 \
   --device cuda
@@ -37,7 +37,7 @@ python train.py \
   --d_model 256 \
   --n_heads 4 \
   --d_ff 512 \
-  --num_layers 8 \
+  --num_layers 4 \
   --max_len 5000 \
   --dropout 0.1 \
   --device cuda

@@ -1,250 +1,127 @@
-import json
+"""
+在 dev 集上评估模型，输出各实体类型的细粒度 P/R/F1。
+用法：
+    python eval.py --model_name transformer
+    python eval.py --model_name attnres_transformer
+    python eval.py --model_name attnres_transformer_my
+"""
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-from tqdm import tqdm
+from collections import defaultdict
 
-from models.TransformerNER import TransformerNER
-from dataset.dataset import NERDataset, collate_fn
-
-
-# =========================
-# 1. 路径配置
-# =========================
-train_path = "data/train.txt"
-train_tag_path = "data/train_TAG.txt"
-dev_path = "data/dev.txt"
-dev_tag_path = "data/dev_TAG.txt"
-model_path = "checkpoints/best_model.pt"
+from tools.configer import parse_args
+from tools.loader import load_meta
+from tools.builder import build_dataloaders, build_model
+from tools.trainer import extract_entities
 
 
-# =========================
-# 2. 工具函数
-# =========================
-def load_json(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+CKPT_PATHS = {
+    "transformer":         "checkpoints/transformer/best_model.pt",
+    "attnres_transformer": "checkpoints/attnres_transformer/best_model.pt",
+    "attnres_transformer_my": "checkpoints/attnres_transformer_my/best_model.pt",
+}
 
 
-def extract_entities(tag_ids, id2tag):
-    """
-    将 BIO 标签序列转换为实体集合
-    返回:
-        set((start, end, ent_type))
-    其中 start/end 都是闭区间
-    """
-    entities = set()
-    start = None
-    ent_type = None
-
-    for i, tag_id in enumerate(tag_ids):
-        tag = id2tag[int(tag_id)]
-
-        if tag == "O":
-            if start is not None:
-                entities.add((start, i - 1, ent_type))
-                start = None
-                ent_type = None
-            continue
-
-        if "_" not in tag:
-            if start is not None:
-                entities.add((start, i - 1, ent_type))
-                start = None
-                ent_type = None
-            continue
-
-        prefix, cur_type = tag.split("_", 1)
-
-        if prefix == "B":
-            if start is not None:
-                entities.add((start, i - 1, ent_type))
-            start = i
-            ent_type = cur_type
-
-        elif prefix == "I":
-            if start is not None and ent_type == cur_type:
-                pass
-            else:
-                if start is not None:
-                    entities.add((start, i - 1, ent_type))
-                start = i
-                ent_type = cur_type
-
-        else:
-            if start is not None:
-                entities.add((start, i - 1, ent_type))
-                start = None
-                ent_type = None
-
-    if start is not None:
-        entities.add((start, len(tag_ids) - 1, ent_type))
-
-    return entities
+def load_model(args, meta):
+    ckpt = torch.load(CKPT_PATHS[args.model_name], map_location="cpu")
+    cfg  = ckpt["model_config"]
+    # 用 checkpoint 里保存的模型配置，而不是 args（避免层数不一致）
+    for k, v in cfg.items():
+        setattr(args, k, v)
+    model = build_model(
+        args,
+        vocab_size=cfg["vocab_size"],
+        num_tags=cfg["num_tags"],
+        pad_token_id=cfg["pad_token_id"],
+    )
+    model.load_state_dict(ckpt["model_state_dict"])
+    return model
 
 
-def compute_entity_metrics(pred_batch, gold_batch, id2tag):
-    tp = 0
-    fp = 0
-    fn = 0
-
-    for pred_ids, gold_ids in zip(pred_batch, gold_batch):
-        pred_entities = extract_entities(pred_ids, id2tag)
-        gold_entities = extract_entities(gold_ids, id2tag)
-
-        tp += len(pred_entities & gold_entities)
-        fp += len(pred_entities - gold_entities)
-        fn += len(gold_entities - pred_entities)
-
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-
-    return {
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "tp": tp,
-        "fp": fp,
-        "fn": fn,
-    }
-
-
-def evaluate(model, dataloader, criterion, device, id2tag, desc="Evaluating"):
+@torch.no_grad()
+def evaluate_detail(model, dataloader, id2tag, device):
     model.eval()
 
-    total_loss = 0.0
-    total_tokens = 0
-    correct_tokens = 0
+    # per-type: tp / fp / fn
+    tp = defaultdict(int)
+    fp = defaultdict(int)
+    fn = defaultdict(int)
 
-    all_pred_tags = []
-    all_gold_tags = []
+    for batch in dataloader:
+        input_ids      = batch["input_ids"].to(device)
+        label_ids      = batch["label_ids"].to(device)
+        attention_mask = batch["attention_mask"].to(device)
 
-    with torch.no_grad():
-        for batch in tqdm(dataloader, desc=desc):
-            input_ids = batch["input_ids"].to(device)
-            label_ids = batch["label_ids"].to(device)
+        logits = model(input_ids, attention_mask=attention_mask)
+        preds  = torch.argmax(logits, dim=-1).cpu().tolist()
+        labels = label_ids.cpu().tolist()
 
-            logits = model(input_ids)
+        for pred_seq, gold_seq in zip(preds, labels):
+            valid_pred, valid_gold = [], []
+            for p, g in zip(pred_seq, gold_seq):
+                if g == -100:
+                    continue
+                valid_pred.append(p)
+                valid_gold.append(g)
 
-            loss = criterion(
-                logits.reshape(-1, logits.size(-1)),
-                label_ids.reshape(-1)
-            )
-            total_loss += loss.item()
+            pred_tags = [id2tag[i] for i in valid_pred]
+            gold_tags = [id2tag[i] for i in valid_gold]
 
-            preds = torch.argmax(logits, dim=-1)
+            pred_ents = extract_entities(pred_tags)
+            gold_ents = extract_entities(gold_tags)
 
-            mask = (label_ids != -100)
-            correct_tokens += ((preds == label_ids) & mask).sum().item()
-            total_tokens += mask.sum().item()
+            for ent in pred_ents & gold_ents:
+                tp[ent[0]] += 1
+            for ent in pred_ents - gold_ents:
+                fp[ent[0]] += 1
+            for ent in gold_ents - pred_ents:
+                fn[ent[0]] += 1
 
-            preds_cpu = preds.cpu().tolist()
-            labels_cpu = label_ids.cpu().tolist()
+    # 汇总
+    all_types = sorted(set(list(tp) + list(fp) + list(fn)))
+    rows = []
+    total_tp = total_fp = total_fn = 0
 
-            for pred_seq, gold_seq in zip(preds_cpu, labels_cpu):
-                valid_pred = []
-                valid_gold = []
-                for p, g in zip(pred_seq, gold_seq):
-                    if g != -100:
-                        valid_pred.append(p)
-                        valid_gold.append(g)
+    for t in all_types:
+        p  = tp[t] / (tp[t] + fp[t]) if (tp[t] + fp[t]) > 0 else 0.0
+        r  = tp[t] / (tp[t] + fn[t]) if (tp[t] + fn[t]) > 0 else 0.0
+        f1 = 2 * p * r / (p + r)     if (p + r) > 0          else 0.0
+        rows.append((t, tp[t], fp[t], fn[t], p, r, f1))
+        total_tp += tp[t]
+        total_fp += fp[t]
+        total_fn += fn[t]
 
-                all_pred_tags.append(valid_pred)
-                all_gold_tags.append(valid_gold)
+    # micro overall
+    p_all  = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
+    r_all  = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
+    f1_all = 2 * p_all * r_all / (p_all + r_all) if (p_all + r_all) > 0 else 0.0
+    rows.append(("ALL (micro)", total_tp, total_fp, total_fn, p_all, r_all, f1_all))
 
-    avg_loss = total_loss / len(dataloader)
-    token_acc = correct_tokens / total_tokens if total_tokens > 0 else 0.0
-    entity_metrics = compute_entity_metrics(all_pred_tags, all_gold_tags, id2tag)
-
-    return {
-        "loss": avg_loss,
-        "token_acc": token_acc,
-        "entity_precision": entity_metrics["precision"],
-        "entity_recall": entity_metrics["recall"],
-        "entity_f1": entity_metrics["f1"],
-        "tp": entity_metrics["tp"],
-        "fp": entity_metrics["fp"],
-        "fn": entity_metrics["fn"],
-    }
-
-
-# =========================
-# 3. 读取映射表
-# =========================
-char2id = load_json("meta/char2id.json")
-id2char = load_json("meta/id2char.json")
-tag2id = load_json("meta/tag2id.json")
-id2tag = load_json("meta/id2tag.json")
-
-id2char = {int(k): v for k, v in id2char.items()}
-id2tag = {int(k): v for k, v in id2tag.items()}
+    return rows
 
 
-# =========================
-# 4. 数据集
-# =========================
-train_dataset = NERDataset(train_path, train_tag_path, char2id, tag2id)
-dev_dataset = NERDataset(dev_path, dev_tag_path, char2id, tag2id)
-
-train_loader = DataLoader(
-    train_dataset,
-    batch_size=32,
-    shuffle=False,
-    collate_fn=collate_fn
-)
-
-dev_loader = DataLoader(
-    dev_dataset,
-    batch_size=32,
-    shuffle=False,
-    collate_fn=collate_fn
-)
+def print_table(rows, model_name):
+    print(f"\n{'='*60}")
+    print(f"  Model: {model_name}")
+    print(f"{'='*60}")
+    print(f"{'Type':<14} {'TP':>6} {'FP':>6} {'FN':>6}  {'P':>7} {'R':>7} {'F1':>7}")
+    print(f"{'-'*60}")
+    for t, tp, fp, fn, p, r, f1 in rows:
+        marker = "  ←" if t == "ALL (micro)" else ""
+        print(f"{t:<14} {tp:>6} {fp:>6} {fn:>6}  {p:>7.4f} {r:>7.4f} {f1:>7.4f}{marker}")
+    print(f"{'='*60}")
 
 
-# =========================
-# 5. 加载模型
-# =========================
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def main():
+    args   = parse_args()
+    device = torch.device("cuda" if args.device == "cuda" and torch.cuda.is_available() else "cpu")
+    meta   = load_meta(args)
 
-checkpoint = torch.load(model_path, map_location=device)
-config = checkpoint["config"]
+    _, dev_loader = build_dataloaders(args, meta["char2id"], meta["tag2id"])
 
-model = TransformerNER(
-    vocab_size=config["vocab_size"],
-    num_tags=config["num_tags"],
-    d_model=config["d_model"],
-    n_heads=config["n_heads"],
-    d_ff=config["d_ff"],
-    num_layers=config["num_layers"],
-    max_len=config["max_len"],
-    dropout=config["dropout"],
-    pad_token_id=config["pad_token_id"],
-).to(device)
-
-model.load_state_dict(checkpoint["model_state_dict"])
-
-criterion = nn.CrossEntropyLoss(ignore_index=-100)
+    model = load_model(args, meta).to(device)
+    rows  = evaluate_detail(model, dev_loader, meta["id2tag"], device)
+    print_table(rows, args.model_name)
 
 
-# =========================
-# 6. 开始评估
-# =========================
-train_metrics = evaluate(model, train_loader, criterion, device, id2tag, desc="Evaluating Train")
-dev_metrics = evaluate(model, dev_loader, criterion, device, id2tag, desc="Evaluating Dev")
-
-print("\n===== Train Result =====")
-print(f"train_loss         = {train_metrics['loss']:.6f}")
-print(f"train_token_acc    = {train_metrics['token_acc']:.6f}")
-print(f"train_entity_p     = {train_metrics['entity_precision']:.6f}")
-print(f"train_entity_r     = {train_metrics['entity_recall']:.6f}")
-print(f"train_entity_f1    = {train_metrics['entity_f1']:.6f}")
-print(f"TP = {train_metrics['tp']}, FP = {train_metrics['fp']}, FN = {train_metrics['fn']}")
-
-print("\n===== Dev Result =====")
-print(f"dev_loss           = {dev_metrics['loss']:.6f}")
-print(f"dev_token_acc      = {dev_metrics['token_acc']:.6f}")
-print(f"dev_entity_p       = {dev_metrics['entity_precision']:.6f}")
-print(f"dev_entity_r       = {dev_metrics['entity_recall']:.6f}")
-print(f"dev_entity_f1      = {dev_metrics['entity_f1']:.6f}")
-print(f"TP = {dev_metrics['tp']}, FP = {dev_metrics['fp']}, FN = {dev_metrics['fn']}")
+if __name__ == "__main__":
+    main()

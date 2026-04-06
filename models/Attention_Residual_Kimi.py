@@ -1,4 +1,5 @@
 ## 按照Kimi的论文中的描述复现https://arxiv.org/pdf/2603.15031
+# NLP_NER_Transformer/models/Attention_Residual_Kimi.py
 import torch
 import torch.nn as nn
 

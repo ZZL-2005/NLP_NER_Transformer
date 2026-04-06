@@ -1,3 +1,4 @@
+# NLP_NER_Transformer/models/FullAttentionResidual.py
 import torch
 import torch.nn as nn
 from models.Normalization import RMSNorm
@@ -62,7 +63,7 @@ class FullAttentionResidual_MY(nn.Module):
     ) -> torch.Tensor:
         """
         query: [D]
-            可学习query向量，建议由外部作为nn.Parameter维护
+            可学习query向量，由外部作为nn.Parameter维护
 
         sources: 长度为S的list，每个元素形状 [B, T, D]
             所有历史hidden states

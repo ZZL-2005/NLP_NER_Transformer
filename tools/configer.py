@@ -20,7 +20,7 @@ def parse_args():
 
     # ---------- 训练参数 ----------
     parser.add_argument("--model_name", type=str, default="transformer")
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--num_epochs", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)

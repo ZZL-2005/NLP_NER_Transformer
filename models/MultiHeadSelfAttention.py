@@ -1,7 +1,7 @@
+# NLP_NER_Transformer/models/MultiHeadSelfAttention.py
 import math
 import torch
 import torch.nn as nn
-
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, d_model: int, n_heads: int):

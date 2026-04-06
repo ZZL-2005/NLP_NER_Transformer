@@ -1,9 +1,9 @@
+# NLP_NER_Transformer/models/AttnResTransformerEncoder.py
 from typing import List, Tuple
 import torch
 import torch.nn as nn
-
 from models.AttnResTransformerEncoderLayer import AttnResTransformerEncoderLayer,AttnResTransformerEncoderLayer_MY
-
+from models.FullAttentionResidual import FullAttentionResidual, FullAttentionResidual_MY
 
 class AttnResTransformerEncoder(nn.Module):
     def __init__(
@@ -26,6 +26,10 @@ class AttnResTransformerEncoder(nn.Module):
             for _ in range(num_layers)
         ])
 
+        # 最终聚合：对所有 history 做一次 attention residual，得到最终输出
+        self.final_res = FullAttentionResidual(d_model)
+        self.final_res_query = nn.Parameter(torch.zeros(d_model))
+
     def forward(
         self,
         x: torch.Tensor,
@@ -43,10 +47,15 @@ class AttnResTransformerEncoder(nn.Module):
         for layer in self.layers:
             history = layer(history, attention_mask=attention_mask)
 
-        last_hidden = history[-1]
+        # 最终聚合：h_L = Σ α_i · v_i
+        last_hidden = self.final_res(
+            self.final_res_query,
+            history,
+            attention_mask=attention_mask,
+        )
         return last_hidden, history
-    
-    
+
+
 
 class AttnResTransformerEncoder_MY(nn.Module):
     def __init__(
@@ -69,6 +78,10 @@ class AttnResTransformerEncoder_MY(nn.Module):
             for _ in range(num_layers)
         ])
 
+        # 最终聚合
+        self.final_res = FullAttentionResidual_MY(d_model)
+        self.final_res_query = nn.Parameter(torch.zeros(d_model))
+
     def forward(
         self,
         x: torch.Tensor,
@@ -86,5 +99,10 @@ class AttnResTransformerEncoder_MY(nn.Module):
         for layer in self.layers:
             history = layer(history, attention_mask=attention_mask)
 
-        last_hidden = history[-1]
+        # 最终聚合
+        last_hidden = self.final_res(
+            self.final_res_query,
+            history,
+            attention_mask=attention_mask,
+        )
         return last_hidden, history

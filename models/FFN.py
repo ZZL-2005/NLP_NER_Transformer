@@ -1,3 +1,4 @@
+# NLP_NER_Transformer/models/FFN.py
 import torch.nn as nn
 
 class FeedForward(nn.Module):

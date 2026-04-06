@@ -1,7 +1,7 @@
+# NLP_NER_Transformer/models/positional_encoding.py
 import math
 import torch
 import torch.nn as nn
-
 
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = 512):
@@ -14,7 +14,7 @@ class SinusoidalPositionalEncoding(nn.Module):
         div_term = torch.exp(
             torch.arange(0, d_model, 2, dtype=torch.float)
             * (-math.log(10000.0) / d_model)
-        )  # [d_model/2]
+        )  # [d_model/2] 用eln转化指数运算，方便掉库
 
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)

@@ -1,7 +1,7 @@
+# NLP_NER_Transformer/models/Normalization.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 
 class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-8):

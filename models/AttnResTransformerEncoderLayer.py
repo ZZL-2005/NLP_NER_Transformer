@@ -1,3 +1,4 @@
+# NLP_NER_Transformer/models/AttnResTransformerEncoderLayer.py
 from models.FullAttentionResidual import FullAttentionResidual,FullAttentionResidual_MY
 from models.FFN import FeedForward
 from models.MultiHeadSelfAttention import MultiHeadSelfAttention

@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
-
 from models.positional_encoding import SinusoidalPositionalEncoding
 from models.TransformerEncoder import TransformerEncoder
-
 
 class TransformerNER(nn.Module):
     def __init__(

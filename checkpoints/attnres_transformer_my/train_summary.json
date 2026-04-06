@@ -1,0 +1,7 @@
+{
+  "best_epoch": 47,
+  "best_dev_f1": 0.9256494993378138,
+  "num_epochs": 50,
+  "exp_name": "attnres_transformer_my",
+  "model_name": "attnres_transformer_my"
+}

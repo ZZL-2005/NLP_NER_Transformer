@@ -16,8 +16,8 @@ from tools.trainer import extract_entities
 
 CKPT_PATHS = {
     "transformer":         "checkpoints/transformer/best_model.pt",
-    "attnres_transformer": "checkpoints/attnres_transformer/best_model.pt",
-    "attnres_transformer_my": "checkpoints/attnres_transformer_my/best_model.pt",
+    # "attnres_transformer": "checkpoints/attnres_transformer/best_model.pt",
+    # "attnres_transformer_my": "checkpoints/attnres_transformer_my/best_model.pt",
 }
 
 
